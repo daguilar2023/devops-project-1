@@ -23,4 +23,4 @@ ENV/
 *.log
 
 # Bytecode cache
-*.egg-info/
+*.egg-info/co
