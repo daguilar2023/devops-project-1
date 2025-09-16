@@ -28,6 +28,9 @@ class Post(db.Model):
     def __repr__(self):
         return f"<Post {self.id} {self.title!r}>"
 
+# ----------------------
+#New model fixed
+# ----------------------
 class ActionLog(db.Model):
     __tablename__ = 'action_logs'
     id = db.Column(db.Integer, primary_key=True)
