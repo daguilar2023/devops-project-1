@@ -1,3 +1,12 @@
+"""Minimal Blog (Flask + SQLite)
+
+Public: list & view non-archived posts.
+Admin: CRUD, archive/unarchive, and action history.
+
+Built for SDLC/DevOps coursework. Kept intentionally small and readable,
+with a simple three-layer split: templates (presentation), routes/controllers
+(application), and SQLAlchemy + SQLite (data).
+"""
 from datetime import datetime
 from flask import Flask, render_template, request, redirect, url_for, flash, abort
 from flask_sqlalchemy import SQLAlchemy
@@ -7,10 +16,14 @@ import os
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 DB_PATH = os.path.join(BASE_DIR, 'blog.db')
 
+class Config:
+    """Tiny config wrapper so secrets/paths can come from env, with sane defaults."""
+    SECRET_KEY = os.environ.get('SECRET_KEY', 'dev-secret-key')
+    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL', f'sqlite:///{DB_PATH}')
+    SQLALCHEMY_TRACK_MODIFICATIONS = False
+
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'dev-secret-key'
-app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{DB_PATH}'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config.from_object(Config)
 
 db = SQLAlchemy(app)
 
@@ -25,11 +38,16 @@ with app.app_context():
 # Models
 # ----------------------
 class Post(db.Model):
+    """Blog post entity stored in 'posts'.
+
+    Archived posts are hidden from the public homepage.
+    """
     __tablename__ = 'posts'
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(200), nullable=False)
     content = db.Column(db.Text, nullable=False)
     is_archived = db.Column(db.Boolean, default=False, nullable=False)
+    # Note: naive UTC for simplicity; in production you'd likely use timezone-aware timestamps.
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
@@ -37,9 +55,13 @@ class Post(db.Model):
         return f"<Post {self.id} {self.title!r}>"
 
 # ----------------------
-#New model fixed
+# Action log model
 # ----------------------
 class ActionLog(db.Model):
+    """Audit record of admin actions (CREATE/UPDATE/DELETE/ARCHIVE/UNARCHIVE).
+
+    post_id is nullable so DELETE can be logged after the row is removed.
+    """
     __tablename__ = 'action_logs'
     id = db.Column(db.Integer, primary_key=True)
     action = db.Column(db.String(100), nullable=False)
@@ -57,6 +79,13 @@ class ActionLog(db.Model):
 # ----------------------
 
 def log_action(action: str, post: Post | None = None, note: str | None = None):
+    """Append an audit entry to action_logs.
+
+    Args:
+        action: One of CREATE/UPDATE/DELETE/ARCHIVE/UNARCHIVE.
+        post: The Post affected (None for DELETE after removal).
+        note: Short human-readable context.
+    """
     entry = ActionLog(action=action, post_id=(post.id if post else None), note=note)
     db.session.add(entry)
     db.session.commit()
@@ -66,6 +95,7 @@ def log_action(action: str, post: Post | None = None, note: str | None = None):
 # ----------------------
 @app.route('/')
 def index():
+    # Public view: only non-archived posts, newest first.
     posts = Post.query.filter_by(is_archived=False).order_by(Post.created_at.desc()).all()
     return render_template('index.html', posts=posts)
 
@@ -77,7 +107,7 @@ def view_post(post_id):
     return render_template('post_form.html', post=post, readonly=True)
 
 # ----------------------
-# Admin routes (no auth yet)
+# Admin routes (auth to be added in a later iteration)
 # ----------------------
 @app.route('/admin')
 def admin_home():
@@ -123,6 +153,7 @@ def admin_delete_post(post_id):
     title = post.title
     db.session.delete(post)
     db.session.commit()
+    # Log after deletion; post_id is None because the row is gone.
     log_action('DELETE', None, note=f'Deleted post id={post_id} title={title!r}')
     flash('Post deleted.', 'success')
     return redirect(url_for('admin_home'))
@@ -133,6 +164,7 @@ def admin_archive_post(post_id):
     if not post.is_archived:
         post.is_archived = True
         db.session.commit()
+        # Record the archive event for history/auditing.
         log_action('ARCHIVE', post, note=f'Archived post "{post.title}"')
         flash('Post archived.', 'success')
     return redirect(url_for('admin_home'))
@@ -143,6 +175,7 @@ def admin_unarchive_post(post_id):
     if post.is_archived:
         post.is_archived = False
         db.session.commit()
+        # Record the unarchive event for history/auditing.
         log_action('UNARCHIVE', post, note=f'Unarchived post "{post.title}"')
         flash('Post unarchived.', 'success')
     return redirect(url_for('admin_home'))
@@ -157,7 +190,7 @@ def admin_history():
 # ----------------------
 @app.cli.command('init-db')
 def init_db():
-    """Initialize the database tables."""
+    """Initialize database tables (safe to run multiple times)."""
     db.create_all()
     print('Database initialized at', DB_PATH)
 
