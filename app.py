@@ -1,6 +1,7 @@
 from datetime import datetime
 from flask import Flask, render_template, request, redirect, url_for, flash, abort
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import inspect
 import os
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
@@ -12,6 +13,13 @@ app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{DB_PATH}'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
+
+# Ensure tables exist on first run (safe if they already exist)
+with app.app_context():
+    existing = set(inspect(db.engine).get_table_names())
+    needed = {"posts", "action_logs"}
+    if not needed.issubset(existing):
+        db.create_all()
 
 # ----------------------
 # Models
