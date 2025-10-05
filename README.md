@@ -45,19 +45,25 @@ The homepage displays all public (non-archived) posts.
    pip install -r requirements.txt
    ```
 
-4. **Initialize the database**
+4. **Run app.py**
+
+   ```bash
+   python3 app.py
+   ```
+
+5. **Initialize the database (if step 4 didnt work)**
 
    ```bash
    flask --app app init-db
    ```
 
-5. **Run the application**
+6. **Run the application (if step 4 didint work, and step 5 works**
 
    ```bash
    flask --app app run --debug
    ```
 
-6. **Access the app**
+7. **Access the app**
    - Public homepage: [http://localhost:5000/](http://localhost:5000/)
    - Admin panel: [http://localhost:5000/admin](http://localhost:5000/admin)
 
