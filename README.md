@@ -57,7 +57,7 @@ The homepage displays all public (non-archived) posts.
    flask --app app init-db
    ```
 
-6. **Run the application (if step 4 didint work, and step 5 works**
+6. **Run the application (if step 4 didint work, and step 5 works)**
 
    ```bash
    flask --app app run --debug
