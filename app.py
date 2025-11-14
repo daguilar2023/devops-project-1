@@ -8,10 +8,13 @@ with a simple three-layer split: templates (presentation), routes/controllers
 (application), and SQLAlchemy + SQLite (data).
 """
 from datetime import datetime
-from flask import Flask, render_template, request, redirect, url_for, flash, abort
+from flask import Flask, render_template, request, redirect, url_for, flash, abort, Blueprint
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import inspect
 import os
+from typing import Any, Optional
+
+db = SQLAlchemy()
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 DB_PATH = os.path.join(BASE_DIR, 'blog.db')
@@ -22,22 +25,16 @@ class Config:
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL', f'sqlite:///{DB_PATH}')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
-app = Flask(__name__)
-app.config.from_object(Config)
-
-db = SQLAlchemy(app)
-
-# Ensure tables exist on first run (safe if they already exist)
-with app.app_context():
-    existing = set(inspect(db.engine).get_table_names())
-    needed = {"posts", "action_logs"}
-    if not needed.issubset(existing):
-        db.create_all()
+bp = Blueprint("main", __name__)
 
 # ----------------------
 # Models
 # ----------------------
 class Post(db.Model):
+    def __init__(self, title: str, content: str, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self.title = title
+        self.content = content
     """Blog post entity stored in 'posts'.
 
     Archived posts are hidden from the public homepage.
@@ -62,6 +59,11 @@ class ActionLog(db.Model):
 
     post_id is nullable so DELETE can be logged after the row is removed.
     """
+    def __init__(self, action: str, post_id: Optional[int] = None, note: Optional[str] = None, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self.action = action
+        self.post_id = post_id
+        self.note = note
     __tablename__ = 'action_logs'
     id = db.Column(db.Integer, primary_key=True)
     action = db.Column(db.String(100), nullable=False)
@@ -93,13 +95,13 @@ def log_action(action: str, post: Post | None = None, note: str | None = None):
 # ----------------------
 # Public routes
 # ----------------------
-@app.route('/')
+@bp.route('/')
 def index():
     # Public view: only non-archived posts, newest first.
     posts = Post.query.filter_by(is_archived=False).order_by(Post.created_at.desc()).all()
     return render_template('index.html', posts=posts)
 
-@app.route('/posts/<int:post_id>')
+@bp.route('/posts/<int:post_id>')
 def view_post(post_id):
     post = Post.query.get_or_404(post_id)
     if post.is_archived:
@@ -109,29 +111,29 @@ def view_post(post_id):
 # ----------------------
 # Admin routes (auth to be added in a later iteration)
 # ----------------------
-@app.route('/admin')
+@bp.route('/admin')
 def admin_home():
     # Show all posts including archived
     posts = Post.query.order_by(Post.created_at.desc()).all()
     return render_template('admin.html', posts=posts)
 
-@app.route('/admin/posts/new', methods=['GET', 'POST'])
+@bp.route('/admin/posts/new', methods=['GET', 'POST'])
 def admin_create_post():
     if request.method == 'POST':
         title = request.form.get('title', '').strip()
         content = request.form.get('content', '').strip()
         if not title or not content:
             flash('Title and content are required.', 'error')
-            return redirect(url_for('admin_create_post'))
+            return redirect(url_for('main.admin_create_post'))
         post = Post(title=title, content=content)
         db.session.add(post)
         db.session.commit()
         log_action('CREATE', post, note=f'Created post "{post.title}"')
         flash('Post created.', 'success')
-        return redirect(url_for('admin_home'))
+        return redirect(url_for('main.admin_home'))
     return render_template('post_form.html', post=None, readonly=False)
 
-@app.route('/admin/posts/<int:post_id>/edit', methods=['GET', 'POST'])
+@bp.route('/admin/posts/<int:post_id>/edit', methods=['GET', 'POST'])
 def admin_edit_post(post_id):
     post = Post.query.get_or_404(post_id)
     if request.method == 'POST':
@@ -140,14 +142,14 @@ def admin_edit_post(post_id):
         post.content = request.form.get('content', '').strip()
         if not post.title or not post.content:
             flash('Title and content are required.', 'error')
-            return redirect(url_for('admin_edit_post', post_id=post.id))
+            return redirect(url_for('main.admin_edit_post', post_id=post.id))
         db.session.commit()
         log_action('UPDATE', post, note=f'Updated title from {old_title!r} to {post.title!r}')
         flash('Post updated.', 'success')
-        return redirect(url_for('admin_home'))
+        return redirect(url_for('main.admin_home'))
     return render_template('post_form.html', post=post, readonly=False)
 
-@app.route('/admin/posts/<int:post_id>/delete', methods=['POST'])
+@bp.route('/admin/posts/<int:post_id>/delete', methods=['POST'])
 def admin_delete_post(post_id):
     post = Post.query.get_or_404(post_id)
     title = post.title
@@ -156,9 +158,9 @@ def admin_delete_post(post_id):
     # Log after deletion; post_id is None because the row is gone.
     log_action('DELETE', None, note=f'Deleted post id={post_id} title={title!r}')
     flash('Post deleted.', 'success')
-    return redirect(url_for('admin_home'))
+    return redirect(url_for('main.admin_home'))
 
-@app.route('/admin/posts/<int:post_id>/archive', methods=['POST'])
+@bp.route('/admin/posts/<int:post_id>/archive', methods=['POST'])
 def admin_archive_post(post_id):
     post = Post.query.get_or_404(post_id)
     if not post.is_archived:
@@ -167,9 +169,9 @@ def admin_archive_post(post_id):
         # Record the archive event for history/auditing.
         log_action('ARCHIVE', post, note=f'Archived post "{post.title}"')
         flash('Post archived.', 'success')
-    return redirect(url_for('admin_home'))
+    return redirect(url_for('main.admin_home'))
 
-@app.route('/admin/posts/<int:post_id>/unarchive', methods=['POST'])
+@bp.route('/admin/posts/<int:post_id>/unarchive', methods=['POST'])
 def admin_unarchive_post(post_id):
     post = Post.query.get_or_404(post_id)
     if post.is_archived:
@@ -178,23 +180,40 @@ def admin_unarchive_post(post_id):
         # Record the unarchive event for history/auditing.
         log_action('UNARCHIVE', post, note=f'Unarchived post "{post.title}"')
         flash('Post unarchived.', 'success')
-    return redirect(url_for('admin_home'))
+    return redirect(url_for('main.admin_home'))
 
-@app.route('/admin/history')
+@bp.route('/admin/history')
 def admin_history():
     logs = ActionLog.query.order_by(ActionLog.created_at.desc()).limit(200).all()
     return render_template('history.html', logs=logs)
 
-# ----------------------
-# CLI helper to init the DB
-# ----------------------
-@app.cli.command('init-db')
-def init_db():
-    """Initialize database tables (safe to run multiple times)."""
-    db.create_all()
-    print('Database initialized at', DB_PATH)
+def create_app(test_config=None):
+    app = Flask(__name__)
+    app.config.from_object(Config)
+    if test_config:
+        app.config.update(test_config)
+    
+    db.init_app(app)
 
-if __name__ == '__main__':
+    # register blueprint
+    app.register_blueprint(bp)
+
+    # ensure tables exist on first run (safe if they already exist)
     with app.app_context():
+        existing = set(inspect(db.engine).get_table_names())
+        needed = {"posts", "action_logs"}
+        if not needed.issubset(existing):
+            db.create_all()
+
+    # CLI helper to init the DB
+    @app.cli.command("init-db")
+    def init_db_cmd():
+        """Initialize database tables (safe to run multiple times)."""
         db.create_all()
+        print("Database initialized at", DB_PATH)
+
+    return app
+
+if __name__ == "__main__":
+    app = create_app()
     app.run(debug=True)

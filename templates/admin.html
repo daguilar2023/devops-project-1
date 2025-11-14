@@ -6,8 +6,8 @@
   <div class="d-flex align-items-center justify-content-between mb-3">
     <h1 class="m-0">Admin — Posts</h1>
     <div>
-      <a class="btn btn-secondary me-2" href="{{ url_for('admin_history') }}">View History</a>
-      <a class="btn btn-primary" href="{{ url_for('admin_create_post') }}">New Post</a>
+      <a class="btn btn-secondary me-2" href="{{ url_for('main.admin_history') }}">View History</a>
+      <a class="btn btn-primary" href="{{ url_for('main.admin_create_post') }}">New Post</a>
     </div>
   </div>
 
@@ -32,17 +32,17 @@
             <td><small class="text-muted">{{ post.created_at.strftime('%Y-%m-%d %H:%M') }}</small></td>
             <td><small class="text-muted">{{ post.updated_at.strftime('%Y-%m-%d %H:%M') }}</small></td>
             <td class="text-end">
-              <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('admin_edit_post', post_id=post.id) }}">Edit</a>
+              <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('main.admin_edit_post', post_id=post.id) }}">Edit</a>
               {% if not post.is_archived %}
-                <form class="d-inline" action="{{ url_for('admin_archive_post', post_id=post.id) }}" method="post">
+                <form class="d-inline" action="{{ url_for('main.admin_archive_post', post_id=post.id) }}" method="post">
                   <button class="btn btn-sm btn-outline-warning" type="submit">Archive</button>
                 </form>
               {% else %}
-                <form class="d-inline" action="{{ url_for('admin_unarchive_post', post_id=post.id) }}" method="post">
+                <form class="d-inline" action="{{ url_for('main.admin_unarchive_post', post_id=post.id) }}" method="post">
                   <button class="btn btn-sm btn-outline-success" type="submit">Unarchive</button>
                 </form>
               {% endif %}
-              <form class="d-inline" action="{{ url_for('admin_delete_post', post_id=post.id) }}" method="post" onsubmit="return confirm('Delete this post?');">
+              <form class="d-inline" action="{{ url_for('main.admin_delete_post', post_id=post.id) }}" method="post" onsubmit="return confirm('Delete this post?');">
                 <button class="btn btn-sm btn-outline-danger" type="submit">Delete</button>
               </form>
             </td>
