@@ -214,6 +214,9 @@ def create_app(test_config=None):
 
     return app
 
+# Expose a global WSGI app for Azure and other WSGI servers
+app = create_app()
+
 if __name__ == "__main__":
-    app = create_app()
+    # Local development entrypoint
     app.run(debug=True)
