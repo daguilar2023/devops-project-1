@@ -21,6 +21,8 @@ db = SQLAlchemy()
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 DB_PATH = os.path.join(BASE_DIR, 'blog.db')
 
+
+
 class Config:
     """Tiny config wrapper so secrets/paths can come from env, with sane defaults."""
     SECRET_KEY = os.environ.get('SECRET_KEY', 'dev-secret-key')
@@ -29,8 +31,11 @@ class Config:
 
 bp = Blueprint("main", __name__)
 
-# In-memory metrics
-REQUEST_COUNT = 0
+# Prometheus metrics
+REQUEST_COUNT = Counter("request_count", "Total requests", ["endpoint"])
+
+# In-memory metrics used for /health JSON
+REQUEST_TOTAL = 0          # plain integer counter
 ERROR_COUNT = 0
 TOTAL_LATENCY = 0.0
 
@@ -197,10 +202,10 @@ def admin_history():
 @bp.route("/health")
 def health():
     """Basic health + metrics endpoint for monitoring."""
-    avg_latency = (TOTAL_LATENCY / REQUEST_COUNT) if REQUEST_COUNT else 0.0
+    avg_latency = (TOTAL_LATENCY / REQUEST_TOTAL) if REQUEST_TOTAL else 0.0
     payload = {
         "status": "ok",
-        "request_count": REQUEST_COUNT,
+        "request_count": REQUEST_TOTAL,
         "error_count": ERROR_COUNT,
         "avg_latency_ms": round(avg_latency * 1000, 2),
     }
@@ -215,6 +220,10 @@ def create_app(test_config=None):
     
     db.init_app(app)
 
+    @app.before_request
+    def before_request_metrics():
+        REQUEST_COUNT.labels(endpoint=request.path).inc()
+
     # ---- metrics hooks ----
     @app.before_request
     def _start_timer():
@@ -222,8 +231,8 @@ def create_app(test_config=None):
 
     @app.after_request
     def _record_metrics(response):
-        global REQUEST_COUNT, TOTAL_LATENCY
-        REQUEST_COUNT += 1
+        global REQUEST_TOTAL, TOTAL_LATENCY
+        REQUEST_TOTAL += 1
         start = getattr(g, "_start_time", None)
         if start is not None:
             TOTAL_LATENCY += perf_counter() - start
@@ -256,6 +265,10 @@ def create_app(test_config=None):
 
 # Expose a global WSGI app for Azure and other WSGI servers
 app = create_app()
+
+@app.route("/metrics")
+def metrics():
+    return generate_latest(), 200, {"Content-Type": "text/plain"}
 
 if __name__ == "__main__":
     # Local development entrypoint
