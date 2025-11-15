@@ -56,3 +56,13 @@ def test_view_post_page(client):
     """Ensure individual post page loads or fails gracefully"""
     r = client.get("/posts/1")
     assert r.status_code in (200, 302, 404)
+
+def test_health_endpoint(client):
+    r = client.get("/health")
+    assert r.status_code == 200
+    data = r.get_json()
+    assert data["status"] == "ok"
+    # Should at least have these keys
+    assert "request_count" in data
+    assert "error_count" in data
+    assert "avg_latency_ms" in data

@@ -8,11 +8,13 @@ with a simple three-layer split: templates (presentation), routes/controllers
 (application), and SQLAlchemy + SQLite (data).
 """
 from datetime import datetime
-from flask import Flask, render_template, request, redirect, url_for, flash, abort, Blueprint
+from flask import Flask, render_template, request, redirect, url_for, flash, abort, Blueprint, g, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import inspect
 import os
 from typing import Any, Optional
+from time import perf_counter
+from prometheus_client import Counter, generate_latest
 
 db = SQLAlchemy()
 
@@ -26,6 +28,11 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
 bp = Blueprint("main", __name__)
+
+# In-memory metrics
+REQUEST_COUNT = 0
+ERROR_COUNT = 0
+TOTAL_LATENCY = 0.0
 
 # ----------------------
 # Models
@@ -187,6 +194,19 @@ def admin_history():
     logs = ActionLog.query.order_by(ActionLog.created_at.desc()).limit(200).all()
     return render_template('history.html', logs=logs)
 
+@bp.route("/health")
+def health():
+    """Basic health + metrics endpoint for monitoring."""
+    avg_latency = (TOTAL_LATENCY / REQUEST_COUNT) if REQUEST_COUNT else 0.0
+    payload = {
+        "status": "ok",
+        "request_count": REQUEST_COUNT,
+        "error_count": ERROR_COUNT,
+        "avg_latency_ms": round(avg_latency * 1000, 2),
+    }
+    # jsonify ensures proper JSON + mimetype
+    return jsonify(payload), 200
+
 def create_app(test_config=None):
     app = Flask(__name__)
     app.config.from_object(Config)
@@ -194,6 +214,26 @@ def create_app(test_config=None):
         app.config.update(test_config)
     
     db.init_app(app)
+
+    # ---- metrics hooks ----
+    @app.before_request
+    def _start_timer():
+        g._start_time = perf_counter()
+
+    @app.after_request
+    def _record_metrics(response):
+        global REQUEST_COUNT, TOTAL_LATENCY
+        REQUEST_COUNT += 1
+        start = getattr(g, "_start_time", None)
+        if start is not None:
+            TOTAL_LATENCY += perf_counter() - start
+        return response
+    
+    @app.teardown_request
+    def _count_errors(exc):
+        global ERROR_COUNT
+        if exc is not None:
+            ERROR_COUNT += 1
 
     # register blueprint
     app.register_blueprint(bp)
