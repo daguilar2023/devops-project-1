@@ -7,4 +7,4 @@ scrape_configs:
     metrics_path: /metrics
     static_configs:
       - targets:
-          - "daniel-blog-code-0ddbdmd2h3e8hxfq.westeurope-01.azurewebsites.net"
+          - "daniel-blog-code-d0ddbmd2h3e8hxfq.westeurope-01.azurewebsites.net"
