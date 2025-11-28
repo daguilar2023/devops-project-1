@@ -113,7 +113,12 @@ To meet the observability requirements, I added both a health endpoint and Prome
 
 **Health Check Endpoint**  
 I implemented the endpoint “/health”. This endpoint returns a live application status as shown below in the screenshot:  
-\[SCREENSHOT 1\]
+{
+    "avg_latency_ms": 195.13,
+    "error_count": 0,
+    "request_count": 20,
+    "status": "ok"
+}
 
 It Provides:
 
@@ -125,7 +130,35 @@ This can be used by Azure for restarts or autoscaling, while also working as a r
 
 **Prometheus Metrics Endpoint**  
 I also added a second endpoint “/metrics”. This endpoint exposes the app-level metrics in Prometheus format as shown below:  
-\[SCREENSHOT 2\]  
+# HELP python_gc_objects_collected_total Objects collected during gc
+# TYPE python_gc_objects_collected_total counter
+python_gc_objects_collected_total{generation="0"} 1266.0
+python_gc_objects_collected_total{generation="1"} 60.0
+python_gc_objects_collected_total{generation="2"} 153.0
+
+# HELP python_info Python platform information
+python_info{implementation="CPython",major="3",minor="11"} 1.0
+
+# HELP process_virtual_memory_bytes Virtual memory size in bytes.
+process_virtual_memory_bytes 3.218795e+08
+
+# HELP process_resident_memory_bytes Resident memory size in bytes.
+process_resident_memory_bytes 2.103296e+07
+
+# HELP request_count_total Total requests
+# TYPE request_count_total counter
+request_count_total{endpoint="/"} 1.0
+request_count_total{endpoint="/admin"} 5.0
+request_count_total{endpoint="/admin/posts/new"} 2.0
+request_count_total{endpoint="/health"} 3.0
+request_count_total{endpoint="/metrics"} 3.0
+request_count_total{endpoint="/favicon.ico"} 2.0
+
+# HELP request_count_created Total requests creation timestamp
+request_count_created{endpoint="/health"} 1.7632328576593042e+09
+request_count_created{endpoint="/metrics"} 1.7632328834253867e+09
+
+...  
 This includes the total number of requests, requests per end-point, Error count, latency distributions, process memory, CPU time, and Python GC metrics for example.
 
 ## **Conclusion**
